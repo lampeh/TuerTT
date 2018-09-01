@@ -67,7 +67,7 @@
 			text-align: right;
 		}
 		.data {
-			font-size: 6vmax;
+			font-size: 7vmax;
 			position: relative;
 			white-space: nowrap;
 			overflow: hidden;
@@ -213,7 +213,6 @@ if (qs.stylehack) {
 const lcdChars = 5; // number of LCD characters to display
 const lcdText = "8.".repeat(lcdChars).slice(0, -1); // all segments on
 
- 
 const mqttUri = "wss://mqtt.attraktor.org/.ws/mqtt";
 const mqttClientId = `tuerreader-${Math.floor(Math.random() * 0x100000000).toString(16)}`;
 const mqttClientOptions = {
@@ -329,6 +328,8 @@ const topics = {
 */
 };
 
+const app = document.getElementById("app");
+const appIcon = document.getElementById("icon");
 
 const muteButton = app.querySelector(".mute");
 const connectionState = app.querySelector(".connection");
@@ -397,7 +398,7 @@ function updateLed(topic, message, states) {
 
 	// TODO: icon handling doesn't really fit the data model
 	if (state.icon) {
-		icon.href = state.icon;
+		appIcon.href = state.icon;
 	}
 
 	topic.lastState = message.payloadString;
@@ -605,7 +606,7 @@ setTimeout(() => dataTable.classList.remove("init"), 0);
 console.log("Ready.");
 </script>
 </body>
-<!-- 
+<!--
 /*!
  * Traktortüren
  * 2018 Hauke Lampe, Attraktor e.V.
@@ -623,7 +624,7 @@ console.log("Ready.");
  * https://openclipart.org/detail/26902/led-circle-green
  * https://openclipart.org/detail/26906/led-circle-red
  * https://openclipart.org/detail/26907/led-circle-yellow
- * 
+ *
  * LCD font:
  * https://www.keshikan.net/fonts-e.html
  *
@@ -633,7 +634,7 @@ console.log("Ready.");
  * Sounds:
  * Lock and Klick sounds recorded live and placed under Creative Commons CC0 license.
  * Bing sound adapted from Psi IM chat2.wav: https://github.com/psi-im/psi/tree/master/sound
- * 
+ *
  */
 -->
 </html>
