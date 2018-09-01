@@ -9,7 +9,7 @@
 	<link rel="stylesheet" href="fonts/DSEG/css/dseg.css">
 	<!-- TODO: re-usable encapsulation -->
 	<style>
-		html, body, #mqtt { height: 100%; }
+		html, body, #app { height: 100%; }
 		body {
 			font-family: sans-serif;
 			font-weight: 400;
@@ -19,7 +19,7 @@
 			margin: 0;
 			padding: 0;
 		}
-		#mqtt {
+		#app {
 			position: relative;
 		}
 		.mute {
@@ -172,7 +172,7 @@
 </head>
 <body>
 <noscript>Javascript required.</noscript>
-<div id="mqtt">
+<div id="app">
 	<div class="connection activity led" title="not connected"></div>
 	<div class="mute" title="mute sounds"></div>
 	<table class="databox init"></table>
@@ -184,7 +184,7 @@
 /* eslint strict: "off" */
 
 // query string to array
-// http://stackoverflow.com/questions/901115#3855394
+// https://stackoverflow.com/questions/901115#3855394
 const qs = (function(a) {
 	if (a == "") return {};
 	const b = {};
@@ -208,12 +208,6 @@ if (qs.stylehack) {
 	document.head.append(link);
 	document.body.classList.add(`stylehack-${CSS.escape(qs.stylehack)}`);
 }
-
-
-const topNode = document.getElementById("mqtt"); // top level element
-const muteButton = topNode.querySelector(".mute");
-const connectionState = topNode.querySelector(".connection");
-const dataTable = topNode.querySelector(".databox");
 
 
 const lcdChars = 5; // number of LCD characters to display
@@ -335,6 +329,10 @@ const topics = {
 };
 
 
+const muteButton = app.querySelector(".mute");
+const connectionState = app.querySelector(".connection");
+const dataTable = app.querySelector(".databox");
+
 let mute = false; // mute state
 let activity = null; // CSS timer
 
@@ -405,7 +403,7 @@ const client = new Paho.MQTT.Client(mqttUri, mqttClientId);
 function onConnected(reconnect, uri) {
 	console.log(`MQTT ${reconnect ? "re-" : ""}connected to: ${uri}`);
 
-	topNode.classList.add("connected");
+	app.classList.add("connected");
 	connectionState.setAttribute("title", `MQTT ${reconnect ? "re-" : ""}connected to: ${uri}`);
 
 	// subscribe topics
@@ -419,7 +417,7 @@ function onConnected(reconnect, uri) {
 }
 
 function onConnectionLost(responseObject) {
-	topNode.classList.remove("connected");
+	app.classList.remove("connected");
 	connectionState.setAttribute("title", "disconnected");
 
 	if (responseObject.errorCode !== 0) {
@@ -438,11 +436,11 @@ function onMessageArrived(message) {
 		if (activity) {
 			clearTimeout(activity);
 		} else {
-			topNode.classList.add("active");
+			app.classList.add("active");
 		}
 
 		activity = setTimeout(function() {
-			topNode.classList.remove("active");
+			app.classList.remove("active");
 			activity = null;
 		}, 200);
 	}
@@ -560,7 +558,7 @@ if (qs.sound === "never") {
 		mute = true;
 	}
 
-	// based on code from http://blog.foolip.org/2014/02/10/media-playback-restrictions-in-blink/
+	// based on code from https://blog.foolip.org/2014/02/10/media-playback-restrictions-in-blink/
 	// test if play() is ignored when not called from an input event handler
 	const video = document.createElement("video");
 	video.play();
@@ -577,12 +575,12 @@ if (qs.sound === "never") {
 	}
 
 	if (mute) {
-		topNode.classList.add("muted");
+		app.classList.add("muted");
 	}
 
 	muteButton.addEventListener("click", function() {
 		mute = !mute;
-		topNode.classList.toggle("muted");
+		app.classList.toggle("muted");
 	});
 }
 
