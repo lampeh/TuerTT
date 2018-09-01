@@ -183,36 +183,6 @@
 "use strict";
 /* eslint strict: "off" */
 
-// query string to array
-// https://stackoverflow.com/questions/901115#3855394
-const qs = (function(a) {
-	if (a == "") return {};
-	const b = {};
-	for (let i = 0; i < a.length; ++i) {
-		const p = a[i].split("=", 2);
-		if (p.length == 1) {
-			b[p[0]] = "";
-		} else {
-			b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
-		}
-	}
-	return b;
-})(window.location.search.substr(1).split("&"));
-
-
-// quick hack: styles for https://spaceapi.attraktor.org/dataframe/
-if (qs.stylehack) {
-	const link = document.createElement("link");
-	link.setAttribute("rel", "stylesheet");
-	link.setAttribute("href", "/dataframe/stylehacks.css");
-	document.head.append(link);
-	document.body.classList.add(`stylehack-${CSS.escape(qs.stylehack)}`);
-}
-
-
-const lcdChars = 5; // number of LCD characters to display
-const lcdText = "8.".repeat(lcdChars).slice(0, -1); // all segments on
-
 const mqttUri = "wss://mqtt.attraktor.org/.ws/mqtt";
 const mqttClientId = `tuerreader-${Math.floor(Math.random() * 0x100000000).toString(16)}`;
 const mqttClientOptions = {
@@ -221,7 +191,6 @@ const mqttClientOptions = {
 	reconnect: true,
 	onFailure: onConnectionLost
 };
-
 
 // TODO: maybe load sounds on-demand
 // TODO: this also prevents playing more than one of each sound in parallel
@@ -328,6 +297,10 @@ const topics = {
 */
 };
 
+
+const lcdChars = 5; // number of LCD characters to display
+const lcdText = "8.".repeat(lcdChars).slice(0, -1); // all segments on
+
 const app = document.getElementById("app");
 const appIcon = document.getElementById("icon");
 
@@ -337,6 +310,33 @@ const dataTable = app.querySelector(".databox");
 
 let mute = false; // mute state
 let activity = null; // CSS timer
+
+
+// query string to array
+// https://stackoverflow.com/questions/901115#3855394
+const qs = (function(a) {
+	if (a == "") return {};
+	const b = {};
+	for (let i = 0; i < a.length; ++i) {
+		const p = a[i].split("=", 2);
+		if (p.length == 1) {
+			b[p[0]] = "";
+		} else {
+			b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+		}
+	}
+	return b;
+})(window.location.search.substr(1).split("&"));
+
+
+// quick hack: styles for https://spaceapi.attraktor.org/dataframe/
+if (qs.stylehack) {
+	const link = document.createElement("link");
+	link.setAttribute("rel", "stylesheet");
+	link.setAttribute("href", "/dataframe/stylehacks.css");
+	document.head.append(link);
+	document.body.classList.add(`stylehack-${CSS.escape(qs.stylehack)}`);
+}
 
 
 function validateFloat(message) {
