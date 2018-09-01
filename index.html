@@ -5,7 +5,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
 	<link rel="manifest" href="manifest.json">
-	<link rel="icon" sizes="192x192" href="img/leds/led-circle-green.png">
+	<link rel="icon" sizes="192x192" href="img/leds/led-circle-grey.png" id="icon">
 	<link rel="stylesheet" href="fonts/DSEG/css/dseg.css">
 	<!-- TODO: re-usable encapsulation -->
 	<style>
@@ -239,12 +239,13 @@ const sounds = {
 // payloads defined elsewhere (twitter bot, doorPi, GeheimTuer)
 // github sources notoriously out of sync with running code
 
+// TODO: icon handling doesn't really fit the data model
 // https://github.com/attraktorhh/dvarapala
 const publicStates = {
-	unknown: { className: "led-grey" },
-	open_for_public: { className: "led-green", soundEnter: sounds.bing },
-	open_for_members: { className: "led-yellow", soundEnter: sounds.bing },
-	closed: { className: "led-red", soundEnter: sounds.bing }
+	unknown: { className: "led-grey", icon: "img/leds/led-circle-grey.png" },
+	open_for_public: { className: "led-green", soundEnter: sounds.bing, icon: "img/leds/led-circle-green.png" },
+	open_for_members: { className: "led-yellow", soundEnter: sounds.bing, icon: "img/leds/led-circle-yellow.png" },
+	closed: { className: "led-red", soundEnter: sounds.bing, icon: "img/leds/led-circle-red.png" }
 };
 
 const doorStates = {
@@ -392,6 +393,11 @@ function updateLed(topic, message, states) {
 	if (state.soundEnter && !mute && topic.lastState !== "undefined" && !message.retained) {
 		state.soundEnter.currentTime = 0;
 		state.soundEnter.play();
+	}
+
+	// TODO: icon handling doesn't really fit the data model
+	if (state.icon) {
+		icon.href = state.icon;
 	}
 
 	topic.lastState = message.payloadString;
