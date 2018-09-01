@@ -3,6 +3,8 @@
 Yet another MQTT dashboard, displaying temperatures and door lock states
 at the [Attraktor Makerspace e.V. Hamburg](https://attraktor.org/)
 
+https://spaceapi.attraktor.org/tuer/
+
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted.
 
