@@ -1,0 +1,16 @@
+{
+	"name": "Traktortüren",
+	"short_name": "Traktortüren",
+	"description": "Attraktor e.V. MQTT data display",
+	"display": "fullscreen",
+	"orientation": "portrait",
+	"background_color": "#000000",
+	"theme_color": "#67b8dc",
+	"start_url": ".",
+	"scope": ".",
+	"icons": [{
+		"src": "img/leds/led-circle-green.png",
+		"sizes": "192x192",
+		"type": "image/png"
+	}]
+}

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Traktortüren</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
+	<link rel="manifest" href="manifest.json">
+	<link rel="icon" sizes="192x192" href="img/leds/led-circle-green.png">
+	<link rel="stylesheet" href="fonts/DSEG/css/dseg.css">
+	<!-- TODO: re-usable encapsulation -->
+	<style>
+		html, body, #mqtt { height: 100%; }
+		body {
+			font-family: sans-serif;
+			font-weight: 400;
+			font-size: 8vw;
+			color: white;
+			background-color: black;
+			margin: 0;
+			padding: 0;
+		}
+		#mqtt {
+			position: relative;
+		}
+		.mute {
+			position: absolute;
+			top: 0.6em;
+			right: 0.2em;
+			z-index: 1;
+			width: 1em;
+			height: 1em;
+			background-image: url(img/sound/speaker_white.svg);
+			background-size: contain;
+			background-repeat: no-repeat;
+			cursor: pointer;
+		}
+		.muted .mute {
+			background-image: url(img/sound/mute_white.svg);
+		}
+		.activity {
+			position: absolute;
+			top: 0.1em;
+			right: 0.65em;
+			z-index: 1;
+			width: 0.55em;
+			height: 0.55em;
+		}
+		.connected .connection:after {
+			background-image: none;
+		}
+		.databox {
+			height: 100%;
+			margin: auto;
+			border-collapse: separate;
+			border-spacing: 0.25em 0.15em;
+			opacity: 1;
+			transition: opacity 0.4s linear;
+		}
+		.databox.init {
+			opacity: 0 !important;
+		}
+		.databox tr {
+			/* TODO: height needs to adjust to number of topics */
+			height: 10vmax;
+		}
+		.label {
+			text-align: right;
+		}
+		.data {
+			font-size: 6vmax;
+			position: relative;
+			white-space: nowrap;
+			overflow: hidden;
+		}
+		.unit {
+			font-size: 75%;
+		}
+		.led:after, .led:before {
+			content: "";
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-size: contain;
+			background-repeat: no-repeat;
+			background-position: center;
+		}
+		.led:before {
+ 			z-index: -1;
+			background-image: url(img/leds/led-circle-grey.svg);
+		}
+		.led.led-green:after, .active .activity:after {
+			background-image: url(img/leds/led-circle-green.svg);
+		}
+		.led.led-red:after, .connection:after {
+			background-image: url(img/leds/led-circle-red.svg);
+		}
+		.led.led-yellow:after {
+			background-image: url(img/leds/led-circle-yellow.svg);
+		}
+		.led.led-grey:after {
+			background-image: url(img/leds/led-circle-grey.svg);
+		}
+		/* TODO: simpler way to limit blink opacity in disconnected state? */
+		@keyframes fade {
+			0% { opacity: 0 }
+			60% { opacity: 1 }
+			100% { opacity: 1 }
+		}
+		@keyframes fade-dim {
+			0% { opacity: 0 }
+			60% { opacity: 0.3 }
+			100% { opacity: 0.3 }
+		}
+		.led.led-blink:after {
+			animation: fade-dim 0.5s linear infinite alternate;
+		}
+		.connected .led.led-blink:after {
+			animation: fade 0.5s linear infinite alternate;
+		}
+		.active .activity:after {
+			animation: fade 0.25s linear infinite reverse;
+		}
+		.lcd {
+			font-family: "DSEG7-Classic";
+			font-weight: bold;
+		}
+		.lcd-bg {
+			display: inline-block;
+			position: absolute;
+			left: 0;
+			z-index: -1;
+			color: rgba(0, 0, 255, 0.03); /* slightly mis-tuned LCD bias voltage */
+			background-image: url(img/lcdbg.png);
+			border-radius: 0.2em;
+			margin: auto;
+			padding: 0.08em;
+		}
+		.lcd-pad {
+			display: inline-block;
+			visibility: hidden;
+			padding: 0.08em;
+		}
+		.lcd-value {
+			display: inline-block;
+			position: absolute;
+			left: 0;
+			color: black;
+			margin: auto;
+			padding: 0.08em;
+		}
+		/* fade-out disappearing segments */
+		.lcd-value {
+			transition: opacity 0.15s linear; /* adjust LCD temperature. colder -> slower */
+		}
+		.lcd-value.old {
+			opacity: 0 !important;
+		}
+		/* dim data display when not connected to MQTT server */
+		.lcd-value, .led:after {
+			opacity: 0.3;
+		}
+		.connected .lcd-value, .connected .led:after {
+			opacity: 1;
+		}
+		/* don't dim connection/activity LEDs */
+		.connection:after, .activity:after {
+			opacity: 1;
+		}
+	</style>
+</head>
+<body>
+<noscript>Javascript required.</noscript>
+<div id="mqtt">
+	<div class="connection activity led" title="not connected"></div>
+	<div class="mute" title="mute sounds"></div>
+	<table class="databox init"></table>
+</div>
+
+<script src="js/paho-mqtt/paho-mqtt-min.js"></script>
+<script>
+"use strict";
+/* eslint strict: "off" */
+
+// query string to array
+// http://stackoverflow.com/questions/901115#3855394
+const qs = (function(a) {
+	if (a == "") return {};
+	const b = {};
+	for (let i = 0; i < a.length; ++i) {
+		const p = a[i].split("=", 2);
+		if (p.length == 1) {
+			b[p[0]] = "";
+		} else {
+			b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+		}
+	}
+	return b;
+})(window.location.search.substr(1).split("&"));
+
+
+// quick hack: styles for https://spaceapi.attraktor.org/dataframe/
+if (qs.stylehack) {
+	const link = document.createElement("link");
+	link.setAttribute("rel", "stylesheet");
+	link.setAttribute("href", "/dataframe/stylehacks.css");
+	document.head.append(link);
+	document.body.classList.add(`stylehack-${CSS.escape(qs.stylehack)}`);
+}
+
+
+const topNode = document.getElementById("mqtt"); // top level element
+const muteButton = topNode.querySelector(".mute");
+const connectionState = topNode.querySelector(".connection");
+const dataTable = topNode.querySelector(".databox");
+
+
+const lcdChars = 5; // number of LCD characters to display
+const lcdText = "8.".repeat(lcdChars).slice(0, -1); // all segments on
+
+ 
+const mqttUri = "wss://mqtt.attraktor.org/.ws/mqtt";
+const mqttClientId = `tuerreader-${Math.floor(Math.random() * 0x100000000).toString(16)}`;
+const mqttClientOptions = {
+	userName: "tuerreader",
+	password: "CdWezN?S}k)wMrXW!#&LVZdEs*@.]/",
+	reconnect: true,
+	onFailure: onConnectionLost
+};
+
+
+// TODO: maybe load sounds on-demand
+// TODO: this also prevents playing more than one of each sound in parallel
+const sounds = {
+	lock: new Audio("sounds/lock.mp3"),
+	unlock: new Audio("sounds/unlock.mp3"),
+	klick: new Audio("sounds/klick.mp3"),
+	klack: new Audio("sounds/klack.mp3"),
+	bing: new Audio("sounds/bing.mp3"),
+//	error: new Audio("sounds/moep.mp3"),
+};
+
+// map MQTT payloads to CSS classes and sounds
+// payloads defined elsewhere (twitter bot, doorPi, GeheimTuer)
+// github sources notoriously out of sync with running code
+
+// https://github.com/attraktorhh/dvarapala
+const publicStates = {
+	unknown: { className: "led-grey" },
+	open_for_public: { className: "led-green", soundEnter: sounds.bing },
+	open_for_members: { className: "led-yellow", soundEnter: sounds.bing },
+	closed: { className: "led-red", soundEnter: sounds.bing }
+};
+
+const doorStates = {
+	undefined: { className: "led-yellow" },
+	locked: { className: "led-green", soundEnter: sounds.lock },
+	unlocked: { className: "led-red", soundEnter: sounds.unlock }
+};
+
+// https://github.com/lampeh/GeheimTuer
+const geheimStates = {
+	0: { className: "led-green" }, // closed
+	1: { className: "led-red led-blink", soundEnter: sounds.klack, soundLeave: sounds.klick }, // opening
+	2: { className: "led-red" }, // open
+	3: { className: "led-green led-blink", soundEnter: sounds.klack, soundLeave: sounds.klick }, // closing
+	4: { className: "led-yellow" }, // blocked
+	5: { className: "led-yellow led-blink" }, // blocked (PIR)
+	6: { className: "led-grey" } // error
+};
+
+// map MQTT topics to payload types
+// TODO: passing "topic" to update() seems counter-intuitive. it's a state object
+const topics = {
+	"tuer/public/detail": {
+		title: "Geöffnet",
+		className: "led",
+		validate: (message) => message.payloadString in publicStates,
+		update: (topic, message) => updateLed(topic, message, publicStates)
+	},
+	"aqua/sensors/temp/28ff6b1c91150371/mean": {
+		title: "Aussen",
+		className: "lcd",
+		unit: "°C",
+		validate: validateFloat,
+		update: updateValue
+	},
+	"aqua/sensors/temp/28fc72cc03000030/mean": {
+		title: "Innen",
+		className: "lcd",
+		unit: "°C",
+		validate: validateFloat,
+		update: updateValue
+	},
+	"power/average": {
+		title: "Strom",
+		className: "lcd",
+		unit: "W",
+		validate: validateFloat,
+		update: (topic, message) => updateValue(topic, message, 1, 0)
+	},
+	"tuer/main/state": {
+		title: "Vorne",
+		className: "led",
+		validate: (message) => message.payloadString in doorStates,
+		update: (topic, message) => updateLed(topic, message, doorStates)
+	},
+	"tuer/kitchen/state": {
+		title: "Küche",
+		className: "led",
+		validate: (message) => message.payloadString in doorStates,
+		update: (topic, message) => updateLed(topic, message, doorStates)
+	},
+	"tuer/lounge/state": {
+		title: "Lounge",
+		className: "led",
+		validate: (message) => message.payloadString in doorStates,
+		update: (topic, message) => updateLed(topic, message, doorStates)
+	},
+	"tuer/back/state": {
+		title: "Hinten",
+		className: "led",
+		validate: (message) => message.payloadString in doorStates,
+		update: (topic, message) => updateLed(topic, message, doorStates)
+	},
+/*
+	"geheimtuer/door/state": {
+		title: "Geheim",
+		className: "led",
+		validate: (message) => message.payloadString in geheimStates,
+		update: (topic, message) => updateLed(topic, message, geheimStates)
+	}
+*/
+};
+
+
+let mute = false; // mute state
+let activity = null; // CSS timer
+
+
+function validateFloat(message) {
+	return !isNaN(parseFloat(message.payloadString));
+}
+
+function updateLCD(selector, value) {
+	const oldContent = selector.querySelector(".lcd-value:last-child");
+
+	// overlay new value, left-padded by "!" (DSEG-7 all-off character)
+	//  "." has zero width in DSEG-7, can't use padStart()
+	const length = value.replace(/\./g, "").length;
+	const newContent = document.createElement("div");
+	newContent.className = "lcd-value";
+	newContent.textContent = "!".repeat(Math.max(0, lcdChars-length)) + value;
+	selector.appendChild(newContent);
+
+	// fade-out and remove old value
+	if (oldContent) {
+		if (!document.hidden) {
+			oldContent.classList.add("old");
+			setTimeout(() => oldContent.parentNode.removeChild(oldContent), 1000);
+		} else {
+			oldContent.parentNode.removeChild(oldContent);
+		}
+	}
+}
+
+function updateValue(topic, message, factor = 1, decimals = 1) {
+	updateLCD(topic.selector, (parseFloat(message.payloadString) * factor).toFixed(decimals));
+}
+
+function updateLed(topic, message, states) {
+	// no change in state, return early
+	if (topic.lastState === message.payloadString) {
+		return;
+	}
+
+	const state = states[message.payloadString];
+
+	// check if topic.lastState is defined, "undefined" may be a valid state
+	if ("lastState" in topic && topic.lastState in states) {
+		const lastState = states[topic.lastState];
+
+		lastState.className.split(" ").forEach((className) => topic.selector.classList.remove(className));
+
+		if (lastState.soundLeave && !mute && !message.retained) {
+			lastState.soundLeave.currentTime = 0;
+			lastState.soundLeave.play();
+		}
+	}
+
+	state.className.split(" ").forEach((className) => topic.selector.classList.add(className));
+
+	if (state.soundEnter && !mute && topic.lastState !== "undefined" && !message.retained) {
+		state.soundEnter.currentTime = 0;
+		state.soundEnter.play();
+	}
+
+	topic.lastState = message.payloadString;
+}
+
+
+const client = new Paho.MQTT.Client(mqttUri, mqttClientId);
+
+function onConnected(reconnect, uri) {
+	console.log(`MQTT ${reconnect ? "re-" : ""}connected to: ${uri}`);
+
+	topNode.classList.add("connected");
+	connectionState.setAttribute("title", `MQTT ${reconnect ? "re-" : ""}connected to: ${uri}`);
+
+	// subscribe topics
+	for (const topic in topics) {
+		client.subscribe(topic, {
+			qos: 1,
+			invocationContext: { topic },
+			onFailure: (responseObject) => console.log(`failed to subscribe MQTT topic ${responseObject.invocationContext.topic}: ${responseObject.errorMessage}`)
+		});
+	}
+}
+
+function onConnectionLost(responseObject) {
+	topNode.classList.remove("connected");
+	connectionState.setAttribute("title", "disconnected");
+
+	if (responseObject.errorCode !== 0) {
+		console.log(`MQTT connection lost: ${responseObject.errorMessage}`);
+		connectionState.setAttribute("title", `MQTT connection lost: ${responseObject.errorMessage}`);
+		if (!responseObject.reconnect) {
+			setTimeout(() => client.connect(Object.assign({}, mqttClientOptions)), 12345 + (Math.random() * 20000));
+		}
+	}
+}
+
+function onMessageArrived(message) {
+//	console.log(`MQTT message: ${message.destinationName} = ${message.payloadString}`);
+
+	if (!document.hidden) {
+		if (activity) {
+			clearTimeout(activity);
+		} else {
+			topNode.classList.add("active");
+		}
+
+		activity = setTimeout(function() {
+			topNode.classList.remove("active");
+			activity = null;
+		}, 200);
+	}
+
+	const topic = topics[message.destinationName];
+
+	if (!topic) {
+		console.log(`unknown topic in message: ${message.destinationName}`);
+		return;
+	}
+
+	if (!topic.selector) {
+		console.log(`no selector for topic: ${message.destinationName}`);
+		return;
+	}
+
+	if (topic.validate && !topic.validate(message)) {
+		console.log(`unknown value in message: ${message.destinationName} = ${message.payloadString}`);
+		return;
+	}
+
+	if (topic.update) {
+		topic.update(topic, message);
+	}
+
+	topic.selector.setAttribute("title", `${message.destinationName}: ${message.payloadString}`);
+}
+
+client.onConnected = onConnected;
+client.onConnectionLost = onConnectionLost;
+client.onMessageArrived = onMessageArrived;
+
+
+// generate table, save references to dynamic elements
+for (const topic in topics) {
+	const label = document.createElement("td");
+	label.className = "label";
+	label.textContent = topics[topic].title;
+
+	const data = document.createElement("td");
+	data.className = `data${topics[topic].className ? ` ${topics[topic].className}` : ""}`;
+
+	const unit = document.createElement("td");
+	unit.className = "unit";
+	unit.textContent = topics[topic].unit;
+
+	switch (topics[topic].className) {
+		// initialize LCDs
+		case "lcd": {
+			// fill background with LCD image and 8.8.8... ghosting
+			const bg = document.createElement("div");
+			bg.className = "lcd-bg";
+			bg.textContent = lcdText;
+			data.appendChild(bg);
+
+			// invisible padding to expand td. TODO: is that the best way?
+			const pad = document.createElement("div");
+			pad.className = "lcd-pad";
+			pad.textContent = lcdText;
+			data.appendChild(pad);
+
+			// display all segments
+			const value = document.createElement("div");
+			value.className = "lcd-value";
+			value.textContent = lcdText;
+			data.appendChild(value);
+
+			break;
+		}
+	}
+
+	const tr = document.createElement("tr");
+	tr.appendChild(label);
+	tr.appendChild(data);
+	tr.appendChild(unit);
+
+	dataTable.appendChild(tr);
+
+	topics[topic].selector = data;
+}
+
+/*
+$("#mqtt .databox").html(Object.keys(topics).map((topic) =>
+	$("<tr>").html([
+		$("<td>").addClass("label").text(topics[topic].title),
+		topics[topic].selector = $("<td>").addClass("data" + (topics[topic].className ? " " + topics[topic].className : "")),
+		$("<td>").addClass("unit").text(topics[topic].unit ? topics[topic].unit : "")
+	])
+));
+
+// initialize LCDs
+$("#mqtt .databox .lcd").each(function(i, element) {
+	$(element).html([
+		// fill background with LCD image and 8.8.8... ghosting
+		$("<div>").addClass("lcd-bg").text("8.".repeat(lcdChars).slice(0, -1)),
+
+		// invisible padding to expand td. TODO: is that the best way?
+		$("<div>").addClass("lcd-pad").text("8.".repeat(lcdChars).slice(0, -1)),
+
+		// display all segments
+		$("<div>").addClass("lcd-value").text("8.".repeat(lcdChars).slice(0, -1))
+	]);
+});
+*/
+
+
+if (qs.sound === "never") {
+	mute = true;
+	muteButton.parentNode.removeChild(muteButton);
+} else if (qs.sound === "always") {
+	mute = false;
+	muteButton.parentNode.removeChild(muteButton);
+} else {
+	if (qs.sound === "off") {
+		mute = true;
+	}
+
+	// based on code from http://blog.foolip.org/2014/02/10/media-playback-restrictions-in-blink/
+	// test if play() is ignored when not called from an input event handler
+	const video = document.createElement("video");
+	video.play();
+
+	if (video.paused) {
+		mute = true;
+		muteButton.addEventListener("click", function reloadSounds() {
+			// re-load sound objects to enable play()
+			for (const key in sounds) {
+				sounds[key].load();
+			}
+			this.removeEventListener("click", reloadSounds);
+		});
+	}
+
+	if (mute) {
+		topNode.classList.add("muted");
+	}
+
+	muteButton.addEventListener("click", function() {
+		mute = !mute;
+		topNode.classList.toggle("muted");
+	});
+}
+
+// client mutates options object, keep original reference clean-ish
+client.connect(Object.assign({}, mqttClientOptions));
+
+// fade-in table
+//requestAnimationFrame(() => dataTable.classList.remove("init"));
+setTimeout(() => dataTable.classList.remove("init"), 0);
+
+
+// TODO: maybe implement cache service worker to have
+// all assets available offline when added to home-screen
+
+
+console.log("Ready.");
+</script>
+</body>
+<!-- 
+/*!
+ * Traktortüren
+ * 2018 Hauke Lampe, Attraktor e.V.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ *
+ * Speaker icons:
+ * https://commons.wikimedia.org/wiki/File:Speaker_Icon.svg
+ * https://commons.wikimedia.org/wiki/File:Mute_Icon.svg
+ *
+ * LED icons:
+ * https://openclipart.org/detail/26903/led-circle-grey
+ * https://openclipart.org/detail/26902/led-circle-green
+ * https://openclipart.org/detail/26906/led-circle-red
+ * https://openclipart.org/detail/26907/led-circle-yellow
+ * 
+ * LCD font:
+ * https://www.keshikan.net/fonts-e.html
+ *
+ * Paho MQTT client:
+ * https://www.eclipse.org/paho/clients/js/
+ *
+ * Sounds:
+ * Lock and Klick sounds recorded live and placed under Creative Commons CC0 license.
+ * Bing sound adapted from Psi IM chat2.wav: https://github.com/psi-im/psi/tree/master/sound
+ * 
+ */
+-->
+</html>
