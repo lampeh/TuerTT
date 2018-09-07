@@ -156,6 +156,7 @@
 		}
 		.lcd-value.old {
 			opacity: 0 !important;
+			transition-delay: 0.1s;
 		}
 		/* dim data display when not connected to MQTT server */
 		.lcd-value, .led:after {
@@ -350,9 +351,10 @@ function updateLCD(selector, value) {
 	//  "." has zero width in DSEG-7, can't use padStart()
 	const length = value.replace(/\./g, "").length;
 	const newContent = document.createElement("div");
-	newContent.className = "lcd-value";
+	newContent.className = "lcd-value old";
 	newContent.textContent = "!".repeat(Math.max(0, lcdChars-length)) + value;
 	selector.appendChild(newContent);
+	setTimeout(() => newContent.classList.remove("old"), 0);
 
 	// fade-out and remove old value
 	if (oldContent) {
@@ -446,7 +448,7 @@ function onMessageArrived(message) {
 			app.classList.add("active");
 		}
 
-		activity = setTimeout(function() {
+		activity = setTimeout(() => {
 			app.classList.remove("active");
 			activity = null;
 		}, 200);
@@ -585,7 +587,7 @@ if (qs.sound === "never") {
 		app.classList.add("muted");
 	}
 
-	muteButton.addEventListener("click", function() {
+	muteButton.addEventListener("click", () => {
 		mute = !mute;
 		app.classList.toggle("muted");
 	});

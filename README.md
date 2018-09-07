@@ -1,7 +1,7 @@
 # Traktortüren
 
 Yet another MQTT dashboard, displaying temperatures and door lock states
-at the [Attraktor Makerspace e.V. Hamburg](https://attraktor.org/)
+at the [Attraktor Makerspace, Hamburg](https://attraktor.org/)
 
 https://spaceapi.attraktor.org/tuer/
 
