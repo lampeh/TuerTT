@@ -156,7 +156,7 @@
 		}
 		.lcd-value.old {
 			opacity: 0 !important;
-			transition-delay: 0.1s;
+			transition-delay: 0.1s; /* delay fade-out to reduce flickering of unchanged segments */
 		}
 		/* dim data display when not connected to MQTT server */
 		.lcd-value, .led:after {
@@ -348,13 +348,20 @@ function updateLCD(selector, value) {
 	const oldContent = selector.querySelector(".lcd-value:last-child");
 
 	// overlay new value, left-padded by "!" (DSEG-7 all-off character)
+	const newContent = document.createElement("div");
+	newContent.className = "lcd-value";
+
 	//  "." has zero width in DSEG-7, can't use padStart()
 	const length = value.replace(/\./g, "").length;
-	const newContent = document.createElement("div");
-	newContent.className = "lcd-value old";
 	newContent.textContent = "!".repeat(Math.max(0, lcdChars-length)) + value;
+
+	if (!document.hidden) {
+		// fade-in new content
+		newContent.classList.add("old");
+		requestAnimationFrame(() => newContent.classList.remove("old"));
+	}
+
 	selector.appendChild(newContent);
-	setTimeout(() => newContent.classList.remove("old"), 0);
 
 	// fade-out and remove old value
 	if (oldContent) {
