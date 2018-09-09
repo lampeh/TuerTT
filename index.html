@@ -358,7 +358,8 @@ function updateLCD(selector, value) {
 	if (!document.hidden) {
 		// fade-in new content
 		newContent.classList.add("old");
-		requestAnimationFrame(() => newContent.classList.remove("old"));
+		//requestAnimationFrame(() => newContent.classList.remove("old"));
+		setTimeout(() => newContent.classList.remove("old"), 0);
 	}
 
 	selector.appendChild(newContent);
